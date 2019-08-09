@@ -28,6 +28,10 @@ houghParams = {"minDist": 60,
 
 arrayCoords = []
 def mouseLocationClick(event, x, y, flags, param):
+    """
+        displays the active clicked location, and the distance between two clicked locations, specifically in pixels.
+        Does not correct for downsampled images.
+    """
     if event == cv2.EVENT_LBUTTONDOWN:
         print("click identified at: " + str([x,y]))
         arrayCoords.append([x,y])
