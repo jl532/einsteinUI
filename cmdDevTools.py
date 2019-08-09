@@ -12,11 +12,11 @@ import easygui
 import json
 
 imgScaleDown = 2
-gain = 12
-expo = 1e5
-digshift= 4
-pixelform = "Mono8"
-binValue = 2
+videoConfig = {'gain': 24,
+               'expo': 1e5,
+               'digshift': 4,
+               'pixelform':'Mono8',
+               'binval': 2}
 
 automaticPattern = True
 houghParams = {"minDist": 60,
@@ -154,12 +154,12 @@ def cameraControl():
         singleCapture(camera)
 
 def cameraSetVals(camera):
-    camera.Gain = gain
-    camera.ExposureTime = expo
-    camera.DigitalShift = digshift
-    camera.PixelFormat = pixelform
-    camera.BinningVertical.SetValue(binValue)
-    camera.BinningHorizontal.SetValue(binValue)
+    camera.Gain = videoConfig['gain']
+    camera.ExposureTime = videoConfig['expo']
+    camera.DigitalShift = videoConfig['digshift']
+    camera.PixelFormat = videoConfig['pixelform']
+    camera.BinningVertical.SetValue(videoConfig['binval'])
+    camera.BinningHorizontal.SetValue(videoConfig['binval'])
     return camera
     
 def liveStream(camera):
@@ -204,7 +204,7 @@ def singleCapture(camera):
 def patternGen():
     filePath = openImgFile()
     print("Opening " + str(filePath))
-    image = cv2.imread(filePath, 0)
+    image = cv2.imread(filePath, -1)
     
     # crops input image to array area, output = subImg
     print("leftclick positions (2) top left and bottom right corner bounds for the std. press d when done")
@@ -287,6 +287,69 @@ def patternGen():
     out_file = open(jsonFileOutName, "w")
     json.dump(stdSpotDict, out_file)
     out_file.close()
+
+def templateMatch8b(image, pattern):
+    """ Core template matching algorithm to compare image to pattern
+
+    Calculates the correlation between the pattern and the image at all points
+    in 2d sliding window format weighs the correlations higher in the center of
+    the image where the spots should be.
+
+    Args:
+        image (np array): the image to be processed
+
+        pattern (np array): the pattern to be found in the image (circles)
+
+    Returns:
+        topLeftMatch (list): location of the best fit defined as the top left
+            coordinate within the image
+
+        verImg (np array): copy of the image in color with a rectangle drawn
+            where the pattern was best fit
+
+    """
+    imageCols, imageRows = image.shape[::-1]
+    stdCols, stdRows = pattern.shape[::-1]
+    print("pattern std shape: " + str(pattern.shape[::-1]))
+    # grab dimensions of input image and convert to 8bit for manipulation
+    image8b = cv2.normalize(image.copy(),
+                            np.zeros(shape=(imageRows, imageCols)),
+                            0, 255,
+                            norm_type=cv2.NORM_MINMAX,
+                            dtype=cv2.CV_8U)
+    verImg = cv2.cvtColor(image8b.copy(), cv2.COLOR_GRAY2RGB)
+
+    res = cv2.matchTemplate(image8b, pattern, cv2.TM_CCORR_NORMED)
+    _, _, _, max_loc = cv2.minMaxLoc(res)
+    gausCols, gausRows = res.shape[::-1]
+    print("max location REAL: " + str(max_loc))
+    print("gaus img shape: " + str(res.shape[::-1]))
+
+    x, y = np.meshgrid(range(gausCols), range(gausRows))
+    centerRow = int((imageRows - stdRows)/2) - 200
+    centerCol = int((imageCols - stdCols)/2)
+    print("center row and col" + " " + str(centerRow) + " " + str(centerCol))
+    # draws circle where the gaussian is centered.
+    cv2.circle(verImg, (centerCol, centerRow), 3, (0, 0, 255), 3)
+    sigma = 400  # inverse slope-- smaller = sharper peak, larger = dull peak
+    gausCenterWeight = np.exp(-((x-centerCol)**2 + (y-centerRow)**2) /
+                              (2.0 * sigma**2))
+    _, _, _, testCenter = cv2.minMaxLoc(gausCenterWeight)
+    print("gaussian center: " + str(testCenter))
+    weightedRes = res * gausCenterWeight
+    _, _, _, max_loc = cv2.minMaxLoc(weightedRes)
+    print(max_loc)  # max loc is reported as written as column,row...
+    bottomRightPt = (max_loc[0] + stdCols,
+                     max_loc[1] + stdRows)
+    # cv2.rectangle takes in positions as (column, row)....
+    cv2.rectangle(verImg,
+                  max_loc,
+                  bottomRightPt,
+                  (0, 105, 255),
+                  15)
+    # cvWindow("rectangle drawn", verImg, False)
+    topLeftMatch = max_loc  # col, row
+    return topLeftMatch, verImg
         
 def main():
     optionSelect()
