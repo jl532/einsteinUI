@@ -11,7 +11,7 @@ from pypylon import pylon
 import easygui
 import json
 
-imgScaleDown = 2
+imgScaleDown = 1
 videoConfig = {'gain': 24,
                'expo': 1e5,
                'digshift': 4,
@@ -59,6 +59,7 @@ def cvWindow(name, image, keypressBool):
 def circlePixelID(circleList): # output pixel locations of all circles within the list,
     circleIDpointer = 0
     pixelLocations = []
+    print(circleList)
     for eachCircle in circleList:
 #        print("this circle is being analyzed in circle pixel ID")
 #        print(eachCircle)
@@ -71,6 +72,38 @@ def circlePixelID(circleList): # output pixel locations of all circles within th
             for whysInCircle in range(( yCoordCirc - discreteWhyRange),( yCoordCirc + discreteWhyRange)):
                 pixelLocations.append([exesInCircle,whysInCircle, radiusCirc, circleIDpointer])
         circleIDpointer = circleIDpointer + 1 
+    return pixelLocations
+
+def circlePixelIDSingle(circleData):
+    """Identifies all pixels within a circle
+
+    Takes one circle centerpoint location and radius and calculates all pixel
+    coords within the radius from that center location.
+
+    Args:
+        circleData (list): centerpoint row, centerpoint col, and radius
+            for a circle in pattern
+
+    Returns:
+        pixelLocations (list): list of all pixel locations within a circle
+
+    """
+    pixelLocations = []
+    # separates the x and y coordinates of the center of the circles and the
+    # circle radius
+    xCoordCirc = circleData[0]
+    yCoordCirc = circleData[1]
+    radiusCirc = circleData[2]
+    for exesInCircle in range((xCoordCirc - radiusCirc),
+                              (xCoordCirc + radiusCirc + 1)):
+        # Calculates the y-coordinates that define the top and bottom bounds
+        # of a slice (at x position) of the circle
+        whyRange = np.sqrt(
+            pow(radiusCirc, 2) - pow((exesInCircle - xCoordCirc), 2))
+        discreteWhyRange = int(whyRange)
+        for whysInCircle in range((yCoordCirc - discreteWhyRange),
+                                  (yCoordCirc + discreteWhyRange + 1)):
+            pixelLocations.append([exesInCircle, whysInCircle])
     return pixelLocations
 
 def optionSelect():
@@ -204,7 +237,7 @@ def singleCapture(camera):
 def patternGen():
     filePath = openImgFile()
     print("Opening " + str(filePath))
-    image = cv2.imread(filePath, -1)
+    image = cv2.imread(filePath, 0)
     
     # crops input image to array area, output = subImg
     print("leftclick positions (2) top left and bottom right corner bounds for the std. press d when done")
@@ -288,6 +321,42 @@ def patternGen():
     json.dump(stdSpotDict, out_file)
     out_file.close()
 
+def generatePatternMasks(spot_info, shape):
+    """Creates masks from the pattern for later analysis of image
+
+    Generates pattern from JSON encoded circle locations and generates masks
+    for spots and bgMask. This is important for efficient quantification of
+    brightness in the spots and background within the image.
+
+    Args:
+        spot_info (list): encoded circle coordinates within the pattern
+
+        shape (list): encoded shape of the pattern, circles are relative to
+            this.
+    Returns:
+        pattern (np array): the pattern to be found within the image
+
+        spotsMask (np array): the masks for the spots within the image
+
+        bgMask (np array): the masks for the background wihin the image
+
+    """
+    pattern = np.zeros(shape, dtype=np.uint8)
+    spotsMask = pattern.copy()
+    bgMask = 255 * np.ones(shape, dtype=np.uint8)
+    for eachCircle in spot_info:
+        circlePixels = circlePixelIDSingle(eachCircle)
+        for eachPixel in circlePixels:
+            pattern[eachPixel[1], eachPixel[0]] = 50
+            spotsMask[eachPixel[1], eachPixel[0]] = 255
+            bgMask[eachPixel[1], eachPixel[0]] = 0
+        cv2.circle(pattern,
+                   (eachCircle[0], eachCircle[1]),
+                   eachCircle[2],
+                   100,
+                   3)
+    return pattern, spotsMask, bgMask
+
 def templateMatch8b(image, pattern):
     """ Core template matching algorithm to compare image to pattern
 
@@ -350,6 +419,68 @@ def templateMatch8b(image, pattern):
     # cvWindow("rectangle drawn", verImg, False)
     topLeftMatch = max_loc  # col, row
     return topLeftMatch, verImg
+
+def patternMatching(rawImg16b, patternDict):
+    """ Performs pattern matching algorithm on uploaded image
+
+    Takes the input image to be processed and the pattern, and finds the
+    circles, draws circles on a copy of the original image- on a verification
+    image. Then, this program quantifies the brightness of the spot features
+    and the background intensity within the pattern (not-spot areas). Spits out
+    a downsized verification image (because it doesn't need to be 16 bit or as
+    large as the original image to show that circles were found).
+
+    Args:
+        rawImg16b: 16 bit raw image to be pattern matched
+
+        patternDict (dictionary): dictionary with encoded pattern
+
+    Returns:
+        payload (dictionary): contains verification image and the brightnesses
+            of the spots and of the background
+
+    """
+    pattern, spotMask, bgMask = generatePatternMasks(patternDict['spot_info'],
+                                                     patternDict['shape'])
+
+    max_loc, verImg = templateMatch8b(rawImg16b, pattern)
+    stdCols, stdRows = pattern.shape[::-1]
+
+    circleLocs = patternDict['spot_info']
+
+    subImage = rawImg16b[max_loc[1]:max_loc[1] + stdRows,
+                         max_loc[0]:max_loc[0] + stdCols].copy()
+
+    for eachCircle in circleLocs:
+        eachCircle[0] = eachCircle[0] + max_loc[0]
+        eachCircle[1] = eachCircle[1] + max_loc[1]
+        cv2.circle(verImg,
+                   (eachCircle[0], eachCircle[1]),
+                   eachCircle[2]+4,
+                   (30, 30, 255),
+                   3)
+        cv2.circle(verImg,
+                   (eachCircle[0], eachCircle[1]),
+                   2,
+                   (30, 30, 255),
+                   2)
+    label_im, nb_labels = ndimage.label(spotMask)
+    spot_vals = ndimage.measurements.mean(subImage, label_im,
+                                          range(1, nb_labels+1))
+    mean_vals = ndimage.measurements.mean(subImage, label_im)
+    print(spot_vals)
+    print(mean_vals)
+    label_bg, bg_labels = ndimage.label(bgMask)
+    mean_bg = ndimage.measurements.mean(subImage, label_bg)
+    print(mean_bg)
+
+    verImg = cv2.pyrDown(verImg)  # downsizes
+    cv2.imwrite("verification-img.tiff", verImg)
+    verImgStr = encodeImage(verImg)
+    payload = {"ver_Img": verImgStr,
+               "intensities": spot_vals.tolist(),
+               "background": mean_bg}
+    return payload
         
 def main():
     optionSelect()

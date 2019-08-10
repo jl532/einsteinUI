@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (QApplication,
                             QMainWindow, 
                             QVBoxLayout, 
                             QFileDialog)
+from scipy import ndimage
 import cv2
 import numpy as np
 import time
@@ -21,13 +22,15 @@ import pyqtgraph as pg
 from pypylon import pylon
 from einsteinEncodedUI import Ui_MainWindow
 import easygui
+import json
 from cmdDevTools import (cvWindow,
-                         circlePixelID,
                          openImgFile,
                          buffer2image,
                          cameraSetVals,
                          singleCapture,
-                         templateMatch8b)
+                         templateMatch8b,
+                         patternMatching,
+                         generatePatternMasks)
 
 # will store these configs in a json file later for modification
 # Configs for video streaming, will be optimizable later
@@ -128,7 +131,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def openImage(self):
         filePath = openImgFile()
         self.editTextBox("opening " + str(filePath))
-        self.image = cv2.imread(filePath, 0)        
+        self.image = cv2.imread(filePath, -1)        
         self.displayImageFullscreen(self.image)
         self.displayImageInWindow(self.image)
         self.editTextBox("image opened")
@@ -140,17 +143,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """
         filePath = openImgFile()
         self.editTextBox("opening " + str(filePath))
-        self.template = cv2.imread(filePath, 0)        
-        self.displayImageFullscreen(self.template)
+        #self.template = cv2.imread(filePath, 0)        
+        #self.displayImageFullscreen(self.template)
+        self.patternDict = {}
+        with open(filePath) as json_file:
+            self.patternDict = json.load(json_file)
         self.editTextBox("circle dictionary uploaded")
 
     def autoOn(self):
-        if self.template.any() and self.image.any():
-            print("yahtzee")
-        else:
-            self.editTextBox("You need to upload image and template")
-        pass
-    
+        payload = patternMatching(self.image, self.patternDict)
+        cvWindow("test", payload["ver_Img"], False)
+        print(payload["intensities"])
     def autoOff(self):
         pass
 
