@@ -19,6 +19,12 @@ videoConfig = {'gain': 24,
                'pixelform':'Mono8',
                'binval': 2}
 
+singleConfig = {'gain': 12,
+                'expo': 1e6,
+                'digshift': 4,
+                'pixelform':'Mono12p',
+                'binval': 2}
+
 automaticPattern = True
 houghParams = {"minDist": 60,
                "param1" : 12,
@@ -177,7 +183,6 @@ def cameraControl():
     print("connected Device model: " +
           str(camera.GetDeviceInfo().GetModelName()))
     camera.Open()
-    camera = cameraSetVals(camera)
 
     print("Live stream: 'L'; Single Capture: 'S'")
     optionSelect = input("Select Option: ")
@@ -186,17 +191,18 @@ def cameraControl():
     if optionSelect == 'S':
         singleCapture(camera)
 
-def cameraSetVals(camera):
-    camera.Gain = videoConfig['gain']
-    camera.ExposureTime = videoConfig['expo']
-    camera.DigitalShift = videoConfig['digshift']
-    camera.PixelFormat = videoConfig['pixelform']
-    camera.BinningVertical.SetValue(videoConfig['binval'])
-    camera.BinningHorizontal.SetValue(videoConfig['binval'])
+def cameraSetVals(camera, config):
+    camera.Gain = config['gain']
+    camera.ExposureTime = config['expo']
+    camera.DigitalShift = config['digshift']
+    camera.PixelFormat = config['pixelform']
+    camera.BinningVertical.SetValue(config['binval'])
+    camera.BinningHorizontal.SetValue(config['binval'])
     return camera
     
 def liveStream(camera):
     clearPrompt()
+    camera = cameraSetVals(camera, videoConfig)
     print("livestream activating. 'x' exit, 's' save last image")
     camera.StartGrabbing(pylon.GrabStrategy_LatestImageOnly)
     windowName = "live stream"
@@ -224,6 +230,7 @@ def liveStream(camera):
 
 def singleCapture(camera):
     clearPrompt()
+    camera = cameraSetVals(camera, singleConfig)
     buffer = camera.GrabOne(int(expo * 1.1))
     if not buffer:
         raise RuntimeError("Camera failed to capture single image")
@@ -264,13 +271,13 @@ def patternGen():
                                     maxRadius = houghParams["maxRadius"])
         circlesX = np.uint(np.around(circlesD))
         circleLocs = circlesX[0]
-        
+
         verImg = cv2.cvtColor(subImg.copy(), cv2.COLOR_GRAY2RGB)
         idealStdImg = np.zeros(subImg.shape, dtype = np.uint8)
         circlePixels = circlePixelID(circleLocs)
         for eachPixel in circlePixels:
             idealStdImg[eachPixel[1], eachPixel[0]] = 100
-        
+
         for eachCircle in circleLocs:
             cv2.circle(verImg,
                        (eachCircle[0], eachCircle[1]),

@@ -27,7 +27,6 @@ from cmdDevTools import (cvWindow,
                          openImgFile,
                          buffer2image,
                          cameraSetVals,
-                         singleCapture,
                          templateMatch8b,
                          patternMatching,
                          generatePatternMasks)
@@ -47,7 +46,6 @@ singleConfig = {'gain': 12,
                 'pixelform':'Mono12p',
                 'binval': 2}
 
-
 class MainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
@@ -55,7 +53,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         
         self.videoOn = False
         self.videoToggleButton.clicked.connect(self.videoToggle)
-        self.shotButton.clicked.connect(self.singleCapture)
+        self.shotButton.clicked.connect(self.singleCaptureUI)
         self.saveButton.clicked.connect(self.saveImage)
 
         
@@ -81,20 +79,39 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if self.videoOn:
             self.editTextBox("live stream off")
             self.videoOn = False
+            self.Camera.Close()
         else:
             self.editTextBox("live stream on")
-            self.videoOn = True
+            self.VideoOn = True
+            self.camera = pylon.InstantCamera(pylon.TlFactory.GetInstance().CreateFirstDevice())
+            self.camera.Open()
+            self.camera = cameraSetVals(self.camera, videoConfig)
+            self.StartGrabbing(pylon.GrabStrategy_LatestImageOnly)
+            while camera.IsGrabbing():
+                buffer = camera.RetrieveResult(5000, pylon.TimeoutHandling_ThrowException)
+                if buffer.GrabSucceeded():
+                    frame = buffer2image(buffer)
+                    self.displayImageFullscreen(frame)
+                    keypress = cv2.waitKey(1)
+                    if keypress == 27:
+                        cv2.destroyAllWindows()
+                        camera.StopGrabbing()
+                        break
+                buffer.Release()
+            camera.Close()
 
-    def singleCapture(self):
+    def singleCaptureUI(self):
         self.camera = pylon.InstantCamera(pylon.TlFactory.GetInstance().CreateFirstDevice())
         self.camera.Open()
-        self.camera = cameraSetVals(self.camera)
+        self.camera = cameraSetVals(self.camera, singleConfig)
         buffer = self.camera.grabOne(int(singleConfig['expo']*1.1))
         if not buffer:
             raise RuntimeError("Camera failed to capture single image")
         self.image = buffer2image(buffer)
         self.displayImageFullScreen(self.image)
         self.displayImageInWindow(self.image)
+        self.buffer.Release()
+        self.camera.Close()
         self.editTextBox("Captured. Save it!")
     
     def saveImage(self):
@@ -108,14 +125,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         #resizedImg = cv2.resize(cropImage, (480, 320))
         self.im_widget.setImage(imageToShow.transpose())
 
-    def displayImageFullscreen(self,imageToShow):
+    def displayImageFullscreen(self,imageToShow, delayMs):
         windowName = "fullscreen image"
         cv2.namedWindow(windowName, cv2.WINDOW_NORMAL)
         cv2.setWindowProperty(windowName, cv2.WND_PROP_FULLSCREEN, 
                               cv2.WINDOW_FULLSCREEN)
         #resizedImg = cv2.resize(imageToShow, (480, 320))
         cv2.imshow(windowName, imageToShow)
-        cv2.waitKey(3000)
+        cv2.waitKey(delayMs)
         cv2.destroyAllWindows()
 
     def imageCenterCrop(self, image):
