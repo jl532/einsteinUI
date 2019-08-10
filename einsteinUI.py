@@ -104,16 +104,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.editTextBox(fileName + " has been saved")
 
     def displayImageInWindow(self, imageToShow):
-        cropImage = self.imageCenterCrop(imageToShow)
-        resizedImg = cv2.resize(cropImage, (480, 320))
-        self.im_widget.setImage(resizedImg.transpose())
+        #cropImage = self.imageCenterCrop(imageToShow)
+        #resizedImg = cv2.resize(cropImage, (480, 320))
+        self.im_widget.setImage(imageToShow.transpose())
 
     def displayImageFullscreen(self,imageToShow):
         windowName = "fullscreen image"
         cv2.namedWindow(windowName, cv2.WINDOW_NORMAL)
         cv2.setWindowProperty(windowName, cv2.WND_PROP_FULLSCREEN, 
                               cv2.WINDOW_FULLSCREEN)
-        resizedImg = cv2.resize(imageToShow, (480, 320))
+        #resizedImg = cv2.resize(imageToShow, (480, 320))
         cv2.imshow(windowName, imageToShow)
         cv2.waitKey(3000)
         cv2.destroyAllWindows()
@@ -125,7 +125,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             650, 120 to 2200, 1500. will need to change later.
             final size 700 x 430
         """
-        croppedImage = image[120:1500, 650:2200]
+        croppedImage = image #[120:1500, 650:2200]
         return croppedImage
 
     def openImage(self):
@@ -152,8 +152,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def autoOn(self):
         payload = patternMatching(self.image, self.patternDict)
-        cvWindow("test", payload["ver_Img"], False)
-        print(payload["intensities"])
+        #cvWindow("test", payload["ver_Img"], False)
+        verImg = cv2.cvtColor(payload["ver_Img"].copy(), cv2.COLOR_BGR2GRAY)
+        self.displayImageInWindow(verImg)
     def autoOff(self):
         pass
 

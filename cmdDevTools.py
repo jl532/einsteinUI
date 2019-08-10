@@ -10,6 +10,7 @@ import numpy as np
 from pypylon import pylon
 import easygui
 import json
+from scipy import ndimage
 
 imgScaleDown = 1
 videoConfig = {'gain': 24,
@@ -59,7 +60,6 @@ def cvWindow(name, image, keypressBool):
 def circlePixelID(circleList): # output pixel locations of all circles within the list,
     circleIDpointer = 0
     pixelLocations = []
-    print(circleList)
     for eachCircle in circleList:
 #        print("this circle is being analyzed in circle pixel ID")
 #        print(eachCircle)
@@ -154,8 +154,8 @@ def openImgFile():
     filePath = easygui.fileopenbox()
     if filePath == None:
         return []
-    elif filePath.split('.')[-1] != ".tiff":
-        print("only .tiff files can be opened")
+    # elif filePath.split('.')[-1] != ".tiff":
+    #     print("only .tiff files can be opened")
     return filePath
     
 def clearPrompt():
@@ -312,9 +312,8 @@ def patternGen():
     print("pattern generated and saving now...")
     imageOutName = "standard_image.tiff"
     cv2.imwrite(imageOutName, idealStdImg)
-    stdSpotDict = {"batch" : "leptin-1",
+    stdSpotDict = {"batch" : "cassio-EBOV",
                    "spot_info": circleLocs.tolist(),
-                   #"image": encoded_stdImg,
                    "shape": [idealStdImg.shape[0],idealStdImg.shape[1]]}
     jsonFileOutName = "standard_image.json"
     out_file = open(jsonFileOutName, "w")
@@ -442,7 +441,7 @@ def patternMatching(rawImg16b, patternDict):
     """
     pattern, spotMask, bgMask = generatePatternMasks(patternDict['spot_info'],
                                                      patternDict['shape'])
-
+    print(patternDict['spot_info'])
     max_loc, verImg = templateMatch8b(rawImg16b, pattern)
     stdCols, stdRows = pattern.shape[::-1]
 
@@ -450,20 +449,21 @@ def patternMatching(rawImg16b, patternDict):
 
     subImage = rawImg16b[max_loc[1]:max_loc[1] + stdRows,
                          max_loc[0]:max_loc[0] + stdCols].copy()
-
     for eachCircle in circleLocs:
-        eachCircle[0] = eachCircle[0] + max_loc[0]
-        eachCircle[1] = eachCircle[1] + max_loc[1]
+        drawCircle  = [0,0]
+        drawCircle[0] = eachCircle[0] + max_loc[0]
+        drawCircle[1] = eachCircle[1] + max_loc[1]
         cv2.circle(verImg,
-                   (eachCircle[0], eachCircle[1]),
+                   (drawCircle[0], drawCircle[1]),
                    eachCircle[2]+4,
                    (30, 30, 255),
                    3)
         cv2.circle(verImg,
-                   (eachCircle[0], eachCircle[1]),
+                   (drawCircle[0], drawCircle[1]),
                    2,
                    (30, 30, 255),
                    2)
+    print(patternDict['spot_info'])
     label_im, nb_labels = ndimage.label(spotMask)
     spot_vals = ndimage.measurements.mean(subImage, label_im,
                                           range(1, nb_labels+1))
@@ -475,11 +475,11 @@ def patternMatching(rawImg16b, patternDict):
     print(mean_bg)
 
     verImg = cv2.pyrDown(verImg)  # downsizes
-    cv2.imwrite("verification-img.tiff", verImg)
-    verImgStr = encodeImage(verImg)
-    payload = {"ver_Img": verImgStr,
+    # cv2.imwrite("verification-img.tiff", verImg)
+    payload = {"ver_Img": verImg,
                "intensities": spot_vals.tolist(),
                "background": mean_bg}
+    print(patternDict['spot_info'])
     return payload
         
 def main():
