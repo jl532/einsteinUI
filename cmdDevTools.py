@@ -27,10 +27,10 @@ singleConfig = {'gain': 12,
 
 automaticPattern = True
 houghParams = {"minDist": 60,
-               "param1" : 12,
+               "param1" : 16,
                "param2" : 17,
-               "minRadius": 24,
-               "maxRadius": 29}
+               "minRadius": 27,
+               "maxRadius": 33}
 
 
 arrayCoords = []
@@ -122,6 +122,7 @@ def optionSelect():
         print("Image Analysis: 'A'")
         print("Camera Control: 'B'")
         print("Circle Pattern Generation: 'C'")
+        print("Test Pattern Matching: 'D'")
         print("Exit: 'X' or 'x'")
         cmdInput = input("Type in your desired selection and press enter to start: ")
         if cmdInput == 'X'or cmdInput == 'x':
@@ -133,6 +134,8 @@ def optionSelect():
             cameraControl()
         if cmdInput == 'C':
             patternGen()
+        if cmdInput == 'D':
+            testPatternMatch()
 
 def imageAnalysis():
     """ Image analysis downsamples the image by a factor set in the code
@@ -406,7 +409,7 @@ def templateMatch8b(image, pattern):
     # print("center row and col" + " " + str(centerRow) + " " + str(centerCol))
     # draws circle where the gaussian is centered.
     cv2.circle(verImg, (centerCol, centerRow), 3, (0, 0, 255), 3)
-    sigma = 400  # inverse slope-- smaller = sharper peak, larger = dull peak
+    sigma = 800  # inverse slope-- smaller = sharper peak, larger = dull peak
     gausCenterWeight = np.exp(-((x-centerCol)**2 + (y-centerRow)**2) /
                               (2.0 * sigma**2))
     _, _, _, testCenter = cv2.minMaxLoc(gausCenterWeight)
@@ -489,6 +492,34 @@ def patternMatching(rawImg16b, patternDict):
                "background": mean_bg}
     #print(patternDict['spot_info'])
     return payload
+def testPatternMatch():
+    # load images into memory - need regex to build filenames
+    patternFile = "standard_image.json"
+    patternDict = {}
+    with open(patternFile) as json_file:
+        patternDict = json.load(json_file)
+    print("Pattern Dictionary Uploaded")
+    fileNames = []
+    for each1Num in [1,2]:
+        for each2Num in [1,2,3,4,5,6,7,8]:
+            fileNameG = "batch_2_slide_" + str(each1Num) + "_L" +  str(each2Num) + "_C1.tiff"  
+            fileNames.append(fileNameG)
+    for eachImage in fileNames:
+        print("processing image: " + str(eachImage))
+        rawImg = cv2.imread(eachImage, 0)
+        payload = patternMatching(rawImg, patternDict)
+        cvWindow(eachImage, payload["ver_Img"], False)
+        textOut = ("avg intens: " + str(round(payload["avgIntens"], 2)) +
+                   " . BG: " + str(round(payload["background"], 2)))
+        print(textOut)
+    print("pattern matching test complete")
+
+
+
+
+
+    # pattern match each image at a time and output the result to verify
+
         
 def main():
     optionSelect()
