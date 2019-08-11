@@ -70,6 +70,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.im_widget.ui.menuBtn.hide()
         self.plotting_widget.layout().addWidget(self.im_widget)
         self.im_widget.show()
+        self.circleDictUploaded = False
 
 
     def editTextBox(self, text):
@@ -91,7 +92,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 buffer = camera.RetrieveResult(5000, pylon.TimeoutHandling_ThrowException)
                 if buffer.GrabSucceeded():
                     frame = buffer2image(buffer)
-                    self.displayImageFullscreen(frame)
+                    self.displayImageFullscreen(frame, 1)
                     keypress = cv2.waitKey(1)
                     if keypress == 27:
                         cv2.destroyAllWindows()
@@ -108,7 +109,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if not buffer:
             raise RuntimeError("Camera failed to capture single image")
         self.image = buffer2image(buffer)
-        self.displayImageFullScreen(self.image)
+        self.displayImageFullScreen(self.image, 2500)
         self.displayImageInWindow(self.image)
         self.buffer.Release()
         self.camera.Close()
@@ -149,7 +150,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         filePath = openImgFile()
         self.editTextBox("opening " + str(filePath))
         self.image = cv2.imread(filePath, -1)        
-        self.displayImageFullscreen(self.image)
+        self.displayImageFullscreen(self.image, 2500)
         self.displayImageInWindow(self.image)
         self.editTextBox("image opened")
 
@@ -166,12 +167,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         with open(filePath) as json_file:
             self.patternDict = json.load(json_file)
         self.editTextBox("circle dictionary uploaded")
+        self.circleDictUploaded = True
 
     def autoOn(self):
         payload = patternMatching(self.image, self.patternDict)
         #cvWindow("test", payload["ver_Img"], False)
         verImg = cv2.cvtColor(payload["ver_Img"].copy(), cv2.COLOR_BGR2GRAY)
         self.displayImageInWindow(verImg)
+        textOut = ("avg intens: " + str(round(payload["avgIntens"], 2)) +
+                   " . BG: " + str(round(payload["background"], 2)))
+        self.editTextBox(textOut)
     def autoOff(self):
         pass
 

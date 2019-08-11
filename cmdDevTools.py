@@ -385,7 +385,7 @@ def templateMatch8b(image, pattern):
     """
     imageCols, imageRows = image.shape[::-1]
     stdCols, stdRows = pattern.shape[::-1]
-    print("pattern std shape: " + str(pattern.shape[::-1]))
+    # print("pattern std shape: " + str(pattern.shape[::-1]))
     # grab dimensions of input image and convert to 8bit for manipulation
     image8b = cv2.normalize(image.copy(),
                             np.zeros(shape=(imageRows, imageCols)),
@@ -397,23 +397,23 @@ def templateMatch8b(image, pattern):
     res = cv2.matchTemplate(image8b, pattern, cv2.TM_CCORR_NORMED)
     _, _, _, max_loc = cv2.minMaxLoc(res)
     gausCols, gausRows = res.shape[::-1]
-    print("max location REAL: " + str(max_loc))
-    print("gaus img shape: " + str(res.shape[::-1]))
+    # print("max location REAL: " + str(max_loc))
+    # print("gaus img shape: " + str(res.shape[::-1]))
 
     x, y = np.meshgrid(range(gausCols), range(gausRows))
     centerRow = int((imageRows - stdRows)/2) - 200
     centerCol = int((imageCols - stdCols)/2)
-    print("center row and col" + " " + str(centerRow) + " " + str(centerCol))
+    # print("center row and col" + " " + str(centerRow) + " " + str(centerCol))
     # draws circle where the gaussian is centered.
     cv2.circle(verImg, (centerCol, centerRow), 3, (0, 0, 255), 3)
     sigma = 400  # inverse slope-- smaller = sharper peak, larger = dull peak
     gausCenterWeight = np.exp(-((x-centerCol)**2 + (y-centerRow)**2) /
                               (2.0 * sigma**2))
     _, _, _, testCenter = cv2.minMaxLoc(gausCenterWeight)
-    print("gaussian center: " + str(testCenter))
+    # print("gaussian center: " + str(testCenter))
     weightedRes = res * gausCenterWeight
     _, _, _, max_loc = cv2.minMaxLoc(weightedRes)
-    print(max_loc)  # max loc is reported as written as column,row...
+    # print(max_loc)  # max loc is reported as written as column,row...
     bottomRightPt = (max_loc[0] + stdCols,
                      max_loc[1] + stdRows)
     # cv2.rectangle takes in positions as (column, row)....
@@ -448,7 +448,7 @@ def patternMatching(rawImg16b, patternDict):
     """
     pattern, spotMask, bgMask = generatePatternMasks(patternDict['spot_info'],
                                                      patternDict['shape'])
-    print(patternDict['spot_info'])
+    #print(patternDict['spot_info'])
     max_loc, verImg = templateMatch8b(rawImg16b, pattern)
     stdCols, stdRows = pattern.shape[::-1]
 
@@ -470,23 +470,24 @@ def patternMatching(rawImg16b, patternDict):
                    2,
                    (30, 30, 255),
                    2)
-    print(patternDict['spot_info'])
+    #print(patternDict['spot_info'])
     label_im, nb_labels = ndimage.label(spotMask)
     spot_vals = ndimage.measurements.mean(subImage, label_im,
                                           range(1, nb_labels+1))
     mean_vals = ndimage.measurements.mean(subImage, label_im)
     print(spot_vals)
-    print(mean_vals)
+    print("avg spot intensity: " + str(mean_vals))
     label_bg, bg_labels = ndimage.label(bgMask)
     mean_bg = ndimage.measurements.mean(subImage, label_bg)
-    print(mean_bg)
+    print("avg background: " + str(mean_bg))
 
     verImg = cv2.pyrDown(verImg)  # downsizes
     # cv2.imwrite("verification-img.tiff", verImg)
     payload = {"ver_Img": verImg,
                "intensities": spot_vals.tolist(),
+               "avgIntens": mean_vals,
                "background": mean_bg}
-    print(patternDict['spot_info'])
+    #print(patternDict['spot_info'])
     return payload
         
 def main():
