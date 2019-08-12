@@ -23,6 +23,7 @@ from pypylon import pylon
 from einsteinEncodedUI import Ui_MainWindow
 import easygui
 import json
+import csv
 from cmdDevTools import (cvWindow,
                          openImgFile,
                          buffer2image,
@@ -56,9 +57,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.shotButton.clicked.connect(self.singleCaptureUI)
         self.saveButton.clicked.connect(self.saveImage)
 
-        
         self.actionOpen_Image.triggered.connect(self.openImage)
         self.actionOpen_Circle_Dictionary.triggered.connect(self.circleDictUpload)
+        self.actionOpenData.triggered.connect(self.dataFileOpen)
         
         self.actionon.triggered.connect(self.autoOn)
         self.actionoff.triggered.connect(self.autoOff)
@@ -82,7 +83,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.videoOn = False
             self.Camera.Close()
         else:
-            self.editTextBox("live stream on")
+            self.editTextBox("live stream on, ESC to leave")
             self.VideoOn = True
             self.camera = pylon.InstantCamera(pylon.TlFactory.GetInstance().CreateFirstDevice())
             self.camera.Open()
@@ -182,6 +183,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def analyzeImage(self):
         self.editTextBox("Function not yet implemented")
+
+    def dataFileOpen(self):
+        self.editTextBox("Select Data File for output")
+        filePath = openImgFile()
+
+
+
     
         
 def main():

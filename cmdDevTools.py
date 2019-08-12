@@ -11,6 +11,9 @@ from pypylon import pylon
 import easygui
 import json
 from scipy import ndimage
+import os
+import csv
+import sys
 
 imgScaleDown = 1
 videoConfig = {'gain': 24,
@@ -24,7 +27,7 @@ singleConfig = {'gain': 12,
                 'digshift': 4,
                 'pixelform':'Mono12p',
                 'binval': 2}
-
+cvWindowDelay = 5
 automaticPattern = True
 houghParams = {"minDist": 60,
                "param1" : 16,
@@ -58,10 +61,11 @@ def cvWindow(name, image, keypressBool):
     cv2.namedWindow(name, cv2.WINDOW_NORMAL)
     cv2.setMouseCallback(name, mouseLocationClick)
     cv2.imshow(name, image)
-    pressedKey = cv2.waitKey(0)
+    pressedKey = cv2.waitKey(cvWindowDelay)
     cv2.destroyAllWindows()
     if keypressBool:
         return pressedKey
+        sys.exit()
     
 def circlePixelID(circleList): # output pixel locations of all circles within the list,
     circleIDpointer = 0
@@ -163,7 +167,7 @@ def openImgFile():
     filePath = easygui.fileopenbox()
     if filePath == None:
         return []
-    # elif filePath.split('.')[-1] != ".tiff":
+    #elif filePath.split('.')[-1] != ".tiff":
     #     print("only .tiff files can be opened")
     return filePath
     
@@ -492,6 +496,7 @@ def patternMatching(rawImg16b, patternDict):
                "background": mean_bg}
     #print(patternDict['spot_info'])
     return payload
+
 def testPatternMatch():
     # load images into memory - need regex to build filenames
     patternFile = "standard_image.json"
@@ -499,11 +504,13 @@ def testPatternMatch():
     with open(patternFile) as json_file:
         patternDict = json.load(json_file)
     print("Pattern Dictionary Uploaded")
+    cwd = os.getcwd()
     fileNames = []
-    for each1Num in [1,2]:
+    for each1Num in [1,2,3,4]:
         for each2Num in [1,2,3,4,5,6,7,8]:
-            fileNameG = "batch_2_slide_" + str(each1Num) + "_L" +  str(each2Num) + "_C1.tiff"  
-            fileNames.append(fileNameG)
+            for each3Num in [1,2,3]:
+                fileNameG = cwd + "/cassios 4 drops/batch_2_slide_" + str(each1Num) + "_L" +  str(each2Num) + "_C" + str(each3Num) + ".tiff"  
+                fileNames.append(fileNameG)
     for eachImage in fileNames:
         print("processing image: " + str(eachImage))
         rawImg = cv2.imread(eachImage, 0)
@@ -512,13 +519,23 @@ def testPatternMatch():
         textOut = ("avg intens: " + str(round(payload["avgIntens"], 2)) +
                    " . BG: " + str(round(payload["background"], 2)))
         print(textOut)
+        writeCSVData(eachImage, payload)
     print("pattern matching test complete")
 
+def writeCSVData(fileName, dataPayload):    
+    eachLine = []
+    eachLine.append("file: ")
+    cutFileName = fileName.split("/")[-1].split(".")[0]
+    eachLine.append(fileName)
+    eachLine.append("intensities: ")
+    for eachSpot in dataPayload['intensities']:
+        eachLine.append(eachSpot)
+    eachLine.append("background: ")
+    eachLine.append(dataPayload['background'])
+    with open('outputData.csv', 'a', newline='') as writeFile:
+        writer = csv.writer(writeFile)
+        writer.writerow(eachLine)
 
-
-
-
-    # pattern match each image at a time and output the result to verify
 
         
 def main():
