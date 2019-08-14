@@ -171,7 +171,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.circleDictUploaded = True
 
     def autoOn(self):
-        payload = patternMatching(self.image, self.patternDict)
+        self.payload = patternMatching(self.image, self.patternDict)
         #cvWindow("test", payload["ver_Img"], False)
         verImg = cv2.cvtColor(payload["ver_Img"].copy(), cv2.COLOR_BGR2GRAY)
         self.displayImageInWindow(verImg)

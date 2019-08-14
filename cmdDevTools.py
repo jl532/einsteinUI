@@ -27,14 +27,13 @@ singleConfig = {'gain': 12,
                 'digshift': 4,
                 'pixelform':'Mono12p',
                 'binval': 2}
-cvWindowDelay = 5
-automaticPattern = True
 houghParams = {"minDist": 60,
                "param1" : 16,
                "param2" : 17,
                "minRadius": 27,
-               "maxRadius": 33}
-
+               "maxRadius": 33,
+               "bgRadius": 3*30}
+rowTolerance = 2 * 30
 
 arrayCoords = []
 def mouseLocationClick(event, x, y, flags, param):
@@ -54,67 +53,49 @@ def mouseLocationClick(event, x, y, flags, param):
         else:
             print("click 2 places first")
 
-def cvWindow(name, image, keypressBool):
+def cvWindow(name, image, keypressBool, delay):
     print("---Displaying: "
           +  str(name)
           + "  ---")
     cv2.namedWindow(name, cv2.WINDOW_NORMAL)
     cv2.setMouseCallback(name, mouseLocationClick)
     cv2.imshow(name, image)
-    pressedKey = cv2.waitKey(cvWindowDelay)
+    pressedKey = cv2.waitKey(delay)
     cv2.destroyAllWindows()
     if keypressBool:
         return pressedKey
         sys.exit()
-    
-def circlePixelID(circleList): # output pixel locations of all circles within the list,
-    circleIDpointer = 0
-    pixelLocations = []
-    for eachCircle in circleList:
-#        print("this circle is being analyzed in circle pixel ID")
-#        print(eachCircle)
-        xCoordCirc = eachCircle[0] # separates the x and y coordinates of the center of the circles and the circle radius 
-        yCoordCirc = eachCircle[1]
-        radiusCirc = eachCircle[2]
-        for exesInCircle in range(( xCoordCirc - radiusCirc ),( xCoordCirc + radiusCirc )):
-            whyRange = np.sqrt(pow(radiusCirc,2) - pow((exesInCircle - xCoordCirc),2)) #calculates the y-coordinates that define the top and bottom bounds of a slice (at x position) of the circle 
-            discreteWhyRange = int(whyRange) 
-            for whysInCircle in range(( yCoordCirc - discreteWhyRange),( yCoordCirc + discreteWhyRange)):
-                pixelLocations.append([exesInCircle,whysInCircle, radiusCirc, circleIDpointer])
-        circleIDpointer = circleIDpointer + 1 
-    return pixelLocations
 
-def circlePixelIDSingle(circleData):
-    """Identifies all pixels within a circle
+def tolerantSortXYR(listInput, tolerance):
+    """ 
+    Will sort entries in a list into a proper order with some tolerance 
+    between values. Important when 2D image locations need to be sorted
+    into grid format when pixel locations are imprecise (vary by some tolerance)
+    in the case of the D4 array, this tolerance is around a diameter of the capture
+    spot.
 
-    Takes one circle centerpoint location and radius and calculates all pixel
-    coords within the radius from that center location.
+    listInput = list of [x, y, radius] circle location data
+    tolerance = radius of the circles (or diameter if more tolerant)
 
-    Args:
-        circleData (list): centerpoint row, centerpoint col, and radius
-            for a circle in pattern
-
-    Returns:
-        pixelLocations (list): list of all pixel locations within a circle
-
+    output = sorted list by Y (with tolerance) and X (With tolerance)
     """
-    pixelLocations = []
-    # separates the x and y coordinates of the center of the circles and the
-    # circle radius
-    xCoordCirc = circleData[0]
-    yCoordCirc = circleData[1]
-    radiusCirc = circleData[2]
-    for exesInCircle in range((xCoordCirc - radiusCirc),
-                              (xCoordCirc + radiusCirc + 1)):
-        # Calculates the y-coordinates that define the top and bottom bounds
-        # of a slice (at x position) of the circle
-        whyRange = np.sqrt(
-            pow(radiusCirc, 2) - pow((exesInCircle - xCoordCirc), 2))
-        discreteWhyRange = int(whyRange)
-        for whysInCircle in range((yCoordCirc - discreteWhyRange),
-                                  (yCoordCirc + discreteWhyRange + 1)):
-            pixelLocations.append([exesInCircle, whysInCircle])
-    return pixelLocations
+
+    sortedByWhy = sorted(listInput, key = lambda x: x[1])
+    firstYCoord = sortedByWhy[0][1]
+    sortedOutput = []
+    yRowList = []
+    for each in sortedByWhy:
+        if (abs(each[1]-firstYCoord) < tolerance):
+            yRowList.append(each)
+        else:
+            xSortedRow = sorted(yRowList, key = lambda x: x[0])
+            sortedOutput = sortedOutput + xSortedRow
+            yRowList = []
+            firstYCoord = each[1]
+            yRowList.append(each)
+    xSortedRow = sorted(yRowList, key = lambda x: x[0])
+    sortedOutput = sortedOutput + xSortedRow
+    return sortedOutput
 
 def optionSelect():
     clearPrompt()
@@ -159,7 +140,7 @@ def imageAnalysis():
         print("Lclick to display location")
         print("Rclick to calculate distance between two previous clicks")
         print("press any key to leave image analysis")
-        cvWindow(filePath.split('.')[0].split("/")[-1], image, False)            
+        cvWindow(filePath.split('.')[0].split("/")[-1], image, False, 0)            
     else:
         print("Invalid File Path")
 
@@ -242,7 +223,7 @@ def singleCapture(camera):
     if not buffer:
         raise RuntimeError("Camera failed to capture single image")
     image = buffer2image(buffer)
-    cvWindow("single capture result", image, False)
+    cvWindow("single capture result", image, False, 0)
     saveFName = input("Filename to save as (.tiff will be added)? ")
     cv2.imwrite(str(saveFName) + ".tiff", image)
     print(saveFName + " saved.")
@@ -252,10 +233,9 @@ def patternGen():
     filePath = openImgFile()
     print("Opening " + str(filePath))
     image = cv2.imread(filePath, 0)
-    
     # crops input image to array area, output = subImg
     print("leftclick positions (2) top left and bottom right corner bounds for the std. press d when done")
-    keyPress= cvWindow('Raw Image',image, True)
+    keyPress = cvWindow('Raw Image',image, True, 0)
     if keyPress == ord('d'):
         arrayBotRigCoords = arrayCoords.pop()
         arrayTopLefCoords = arrayCoords.pop()
@@ -265,64 +245,46 @@ def patternGen():
     print(str(cropXCoords))
     print(str(cropYCoords))
     subImg = image[cropYCoords[0]:cropYCoords[1],cropXCoords[0]:cropXCoords[1]].copy()
-    cvWindow("test subimg", subImg, False)
-    
-    if automaticPattern:
-        smoothImg = cv2.medianBlur(subImg, 3)
-        circlesD = cv2.HoughCircles(smoothImg,
-                                    cv2.HOUGH_GRADIENT,1,
-                                    minDist = houghParams["minDist"],
-                                    param1 = houghParams["param1"],
-                                    param2 = houghParams["param2"],
-                                    minRadius = houghParams["minRadius"],
-                                    maxRadius = houghParams["maxRadius"])
-        circlesX = np.uint(np.around(circlesD))
-        circleLocs = circlesX[0]
+    cvWindow("crop result", subImg, False, 0)
 
-        verImg = cv2.cvtColor(subImg.copy(), cv2.COLOR_GRAY2RGB)
-        idealStdImg = np.zeros(subImg.shape, dtype = np.uint8)
-        circlePixels = circlePixelID(circleLocs)
-        for eachPixel in circlePixels:
-            idealStdImg[eachPixel[1], eachPixel[0]] = 100
+    smoothImg = cv2.medianBlur(subImg, 3)
+    circlesD = cv2.HoughCircles(smoothImg,
+                                cv2.HOUGH_GRADIENT,1,
+                                minDist = houghParams["minDist"],
+                                param1 = houghParams["param1"],
+                                param2 = houghParams["param2"],
+                                minRadius = houghParams["minRadius"],
+                                maxRadius = houghParams["maxRadius"])
+    circlesX = np.uint(np.around(circlesD))
+    circleLocs = circlesX[0]
 
-        for eachCircle in circleLocs:
-            cv2.circle(verImg,
-                       (eachCircle[0], eachCircle[1]),
-                       eachCircle[2]+4,
-                       (30,30,255),
-                       3)
-            cv2.circle(verImg,
-                       (eachCircle[0], eachCircle[1]),
-                       2,
-                       (30,30,255),
-                       2)
-            cv2.circle(idealStdImg,
-                       (eachCircle[0], eachCircle[1]),
-                       eachCircle[2],
-                       255,
-                       3)
-        cvWindow("verification image", verImg, False)
-        cvWindow("pattern generated", idealStdImg, False)
-    else:
-        print("click centers of circles, then click (2) points that establish a horiz diameter of one circle. press x when done")
-        keyPress= cvWindow('Cropped Image', subImg, True)
+    verImg = cv2.cvtColor(subImg.copy(), cv2.COLOR_GRAY2RGB)
+    idealStdImg = np.zeros(subImg.shape, dtype = np.uint8)
 
-        diam1 = arrayCoords.pop()
-        diam2 = arrayCoords.pop()
-        fullDiam = abs(diam1[0]-diam2[0])
-        circleLocs = []
-        for each in range(numSpots):
-            coords = arrayCoords.pop()
-            circleLocs.append([coords[0],
-                               coords[1],
-                               round(fullDiam/2)])
+    for eachCircle in circleLocs:
+        cv2.circle(verImg,
+                   (eachCircle[0], eachCircle[1]),
+                   eachCircle[2]+4,
+                   (30,30,255),
+                   3)
+        cv2.circle(verImg,
+                   (eachCircle[0], eachCircle[1]),
+                   2,
+                   (30,30,255),
+                   2)
+        cv2.circle(idealStdImg,
+                   (eachCircle[0], eachCircle[1]),
+                   eachCircle[2],
+                   255,
+                   3)
+        cv2.circle(idealStdImg,
+                   (eachCircle[0], eachCircle[1]),
+                   eachCircle[2],
+                   100,
+                   -1)
+    cvWindow("verification image", verImg, False, 0)
+    cvWindow("pattern generated", idealStdImg, False, 0)
 
-        # Generates the ideal std image from the cropped array image
-        idealStdImg = np.zeros(subImg.shape, dtype=np.uint8)
-        circlePixels = circlePixelID(circleLocs)
-        for eachPixel in circlePixels:
-            idealStdImg[eachPixel[1], eachPixel[0]] = 50
-        cvWindow("testIdeal", idealStdImg, False)
     print("pattern generated and saving now...")
     imageOutName = "standard_image.tiff"
     cv2.imwrite(imageOutName, idealStdImg)
@@ -357,18 +319,44 @@ def generatePatternMasks(spot_info, shape):
     pattern = np.zeros(shape, dtype=np.uint8)
     spotsMask = pattern.copy()
     bgMask = 255 * np.ones(shape, dtype=np.uint8)
-    for eachCircle in spot_info:
-        circlePixels = circlePixelIDSingle(eachCircle)
-        for eachPixel in circlePixels:
-            pattern[eachPixel[1], eachPixel[0]] = 50
-            spotsMask[eachPixel[1], eachPixel[0]] = 255
-            bgMask[eachPixel[1], eachPixel[0]] = 0
+    bgMasksList = []
+
+    sortedCircles = tolerantSortXYR(spot_info, rowTolerance)
+    for eachCircle in sortedCircles:
+        bgMaskEach = np.zeros(shape, dtype=np.uint8)
+        #circlePixels = circlePixelIDSingle(eachCircle)
+        # for eachPixel in circlePixels:
+        #     pattern[eachPixel[1], eachPixel[0]] = 50
+        #     spotsMask[eachPixel[1], eachPixel[0]] = 255
+        #     bgMask[eachPixel[1], eachPixel[0]] = 0
         cv2.circle(pattern,
                    (eachCircle[0], eachCircle[1]),
                    eachCircle[2],
                    100,
-                   3)
-    return pattern, spotsMask, bgMask
+                   -1)
+        cv2.circle(spotsMask,
+                   (eachCircle[0], eachCircle[1]),
+                   eachCircle[2]+1,
+                   255,
+                   -1)
+        cv2.circle(bgMask,
+                   (eachCircle[0], eachCircle[1]),
+                   eachCircle[2],
+                   0,
+                   -1)
+        cv2.circle(bgMaskEach,
+                   (eachCircle[0], eachCircle[1]),
+                   eachCircle[2] * 3,
+                   255,
+                   -1)
+        for eachCircle in spot_info:
+            cv2.circle(bgMaskEach,
+                       (eachCircle[0], eachCircle[1]),
+                       eachCircle[2]+2,
+                       0,
+                       -1)
+        bgMasksList.append(bgMaskEach)
+    return pattern, spotsMask, bgMask, bgMasksList
 
 def templateMatch8b(image, pattern):
     """ Core template matching algorithm to compare image to pattern
@@ -408,7 +396,7 @@ def templateMatch8b(image, pattern):
     # print("gaus img shape: " + str(res.shape[::-1]))
 
     x, y = np.meshgrid(range(gausCols), range(gausRows))
-    centerRow = int((imageRows - stdRows)/2) - 200
+    centerRow = int((imageRows - stdRows)/2) - 400
     centerCol = int((imageCols - stdCols)/2)
     # print("center row and col" + " " + str(centerRow) + " " + str(centerCol))
     # draws circle where the gaussian is centered.
@@ -453,8 +441,8 @@ def patternMatching(rawImg16b, patternDict):
             of the spots and of the background
 
     """
-    pattern, spotMask, bgMask = generatePatternMasks(patternDict['spot_info'],
-                                                     patternDict['shape'])
+    pattern, spotMask, bgMask, bgMasksList = generatePatternMasks(patternDict['spot_info'],
+                                                                     patternDict['shape'])
     #print(patternDict['spot_info'])
     max_loc, verImg = templateMatch8b(rawImg16b, pattern)
     stdCols, stdRows = pattern.shape[::-1]
@@ -490,10 +478,19 @@ def patternMatching(rawImg16b, patternDict):
 
     verImg = cv2.pyrDown(verImg)  # downsizes
     # cv2.imwrite("verification-img.tiff", verImg)
+
+    # Find background of each Circle
+    bgCalculated = []
+    for eachBgMask in bgMasksList:
+        label_bgEa, _ = ndimage.label(eachBgMask)
+        mean_bgEa = ndimage.measurements.mean(subImage, label_bgEa)
+        bgCalculated.append(mean_bgEa)
+
     payload = {"ver_Img": verImg,
                "intensities": spot_vals.tolist(),
                "avgIntens": mean_vals,
-               "background": mean_bg}
+               "background": mean_bg,
+               "eachBackground": bgCalculated}
     #print(patternDict['spot_info'])
     return payload
 
@@ -507,18 +504,19 @@ def testPatternMatch():
     cwd = os.getcwd()
     fileNames = []
     for each1Num in [1,2,3,4]:
-        for each2Num in [1,2,3,4,5,6,7,8]:
-            for each3Num in [1,2,3]:
-                fileNameG = cwd + "/cassios 4 drops/batch_2_slide_" + str(each1Num) + "_L" +  str(each2Num) + "_C" + str(each3Num) + ".tiff"  
+        for eachCNum in [1,2,3]:
+            for eachRNum in [1,2,3,4,5,6,7,8]:
+                fileNameG = cwd + "/cassios 4 drops/batch_2_slide_" + str(each1Num) + "_L" +  str(eachRNum) + "_C" + str(eachCNum) + ".tiff"  
                 fileNames.append(fileNameG)
     for eachImage in fileNames:
         print("processing image: " + str(eachImage))
-        rawImg = cv2.imread(eachImage, 0)
+        rawImg = cv2.imread(eachImage, -1)
         payload = patternMatching(rawImg, patternDict)
-        cvWindow(eachImage, payload["ver_Img"], False)
+        cvWindow(eachImage, payload["ver_Img"], False, 0)
         textOut = ("avg intens: " + str(round(payload["avgIntens"], 2)) +
                    " . BG: " + str(round(payload["background"], 2)))
         print(textOut)
+        print(payload["eachBackground"])
         writeCSVData(eachImage, payload)
     print("pattern matching test complete")
 
@@ -526,13 +524,16 @@ def writeCSVData(fileName, dataPayload):
     eachLine = []
     eachLine.append("file: ")
     cutFileName = fileName.split("/")[-1].split(".")[0]
-    eachLine.append(fileName)
+    eachLine.append(cutFileName)
     eachLine.append("intensities: ")
     for eachSpot in dataPayload['intensities']:
         eachLine.append(eachSpot)
     eachLine.append("background: ")
     eachLine.append(dataPayload['background'])
-    with open('outputData.csv', 'a', newline='') as writeFile:
+    eachLine.append("each background")
+    for eachBG in dataPayload['eachBackground']:
+        eachLine.append(eachBG)
+    with open('outputDataX.csv', 'a', newline='') as writeFile:
         writer = csv.writer(writeFile)
         writer.writerow(eachLine)
 
