@@ -24,7 +24,7 @@ from einsteinEncodedUI import Ui_MainWindow
 import easygui
 import json
 import csv
-from cmdDevTools import (cvWindow,
+from backend_einsteinUI import (cvWindow,
                          openImgFile,
                          buffer2image,
                          cameraSetVals,
